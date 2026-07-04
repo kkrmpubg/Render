@@ -444,6 +444,24 @@ def test_download_manifesthub_release_asset_uses_backend_download_url(tmp_path):
     assert mock_get.call_count >= 1
 
 
+def test_apply_onlinefix_package_rejects_uninstalled_games(monkeypatch, tmp_path):
+    api = GameDropWebViewAPI()
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+
+    monkeypatch.setattr(api, "_get_steam_library_roots", lambda: [str(tmp_path / "steamapps" / "common")])
+    monkeypatch.setattr(api, "_find_steam_game_folder", lambda *args, **kwargs: None)
+    monkeypatch.setattr(api, "_download_onlinefix_package", lambda appid: str(package_dir))
+    monkeypatch.setattr(api, "_find_steam_game_folder_from_package", lambda *args, **kwargs: str(tmp_path / "fake_game"))
+    monkeypatch.setattr(api, "_validate_steam_game_folder", lambda *args, **kwargs: True)
+    monkeypatch.setattr(api, "_copy_onlinefix_to_steam", lambda *args, **kwargs: ["copied"])
+
+    result = api._apply_onlinefix_package("1001270", game_name="Example Game", denuvo=True)
+
+    assert result["ok"] is False
+    assert "not installed" in result["message"].lower()
+
+
 def test_build_html_places_add_and_remove_actions_in_separate_groups():
     html = build_html()
 

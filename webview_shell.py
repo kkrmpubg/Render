@@ -1618,6 +1618,12 @@ class GameDropWebViewAPI:
             if alt_folder and alt_folder != steam_game_folder:
                 steam_game_folder = alt_folder
 
+        if not steam_game_folder or not os.path.isdir(steam_game_folder):
+            return {
+                "ok": False,
+                "message": f"The game for AppID {appid} is not installed in Steam yet. Install the game first, then try the bypass/OnlineFix button again."
+            }
+
         if not self._validate_steam_game_folder(downloaded_files, steam_game_folder, game_name=game_name):
             return {
                 "ok": False,
