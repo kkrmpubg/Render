@@ -1,0 +1,37 @@
+# UTF-8
+#
+# Version Information for GameDrop Executables
+# This file is used by PyInstaller to embed version information into Windows executables
+# Helps reduce false positive virus detections by making executables look more legitimate
+#
+# Note: Update version numbers when releasing new versions
+#
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(3, 0, 0, 0),
+    prodvers=(3, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'GameDrop'),
+        StringStruct(u'FileDescription', u'GameDrop - Steam Game Management Tool'),
+        StringStruct(u'FileVersion', u'3.0.1.0'),
+        StringStruct(u'InternalName', u'GameDrop'),
+        StringStruct(u'LegalCopyright', u'Copyright (C) 2025 GameDrop'),
+        StringStruct(u'OriginalFilename', u'GameDrop.exe'),
+        StringStruct(u'ProductName', u'GameDrop'),
+        StringStruct(u'ProductVersion', u'3.0.1.0')])
+      ]), 
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+  ]
+)
+
