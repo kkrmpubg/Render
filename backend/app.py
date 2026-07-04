@@ -5,17 +5,6 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-DEFAULT_KNOWN_BYPASS_APPIDS = {
-    "1245620",  # Elden Ring
-    "292030",   # The Witcher 3
-    "1091500",  # Cyberpunk 2077
-    "1151640",  # Horizon Zero Dawn Complete Edition
-    "990080",   # Hogwarts Legacy
-    "1174180",  # Red Dead Redemption 2
-    "1196590",  # Resident Evil Village
-    "1850570",  # Death Stranding Director's Cut
-}
-
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -90,7 +79,7 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
                         continue
                     if release_match and any(name.endswith(ext) for ext in archive_exts):
                         return url
-                    if appid_str in name or name.startswith(appid_str):
+                    if appid_str in name or name.startswith(appid_str) or any(token in name for token in (appid_str, "onlinefix", "bypass", "manifest")):
                         return url
                 if release_match and assets:
                     for fallback_asset in assets:
@@ -98,6 +87,18 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
                         fallback_url = fallback_asset.get("browser_download_url")
                         if fallback_url and any(fallback_name.endswith(ext) for ext in archive_exts):
                             return fallback_url
+
+        # Fallback: try the release page HTML and the repo contents endpoint for likely asset names.
+        html_url = f"https://github.com/{repo_owner}/{repo_name}/releases/tag/{appid}"
+        try:
+            html_response = requests.get(html_url, headers=get_github_headers(), timeout=10)
+            if html_response.status_code == 200:
+                html = html_response.text or ""
+                if any(ext in html.lower() for ext in archive_exts):
+                    return html_url
+        except Exception:
+            pass
+
         return None
     except Exception:
         return None
@@ -121,14 +122,15 @@ def bypass_info():
     if not appid:
         return jsonify({"bypass_available": False, "download_url": None, "status": "missing_appid"})
 
-    known_appids = {str(appid)} if str(appid) in DEFAULT_KNOWN_BYPASS_APPIDS else set()
-    remote_appids = set(get_remote_bypass_appids())
-    if appid in known_appids or appid in remote_appids:
-        return jsonify({"bypass_available": True, "download_url": None, "status": "known_candidate"})
-
     download_url = find_github_release_asset_url(repo_owner, repo_name, appid)
     if download_url:
-        return jsonify({"bypass_available": True, "download_url": download_url, "status": "release_asset_found"})
+        return jsonify({"bypass_available": True, "download_url": download_url, "status": "ok"})
+
+    # Fallback to known appids even if the remote bypass list is stale or missing entries.
+    fallback_appids = {"1245620", "292030", "1091500", "1151640", "990080", "1174180", "1196590", "1850570"}
+    if appid in fallback_appids:
+        return jsonify({"bypass_available": True, "download_url": None, "status": "fallback_known_appid"})
+
     return jsonify({"bypass_available": False, "download_url": None, "status": "not_found"})
 
 
