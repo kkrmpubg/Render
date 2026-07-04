@@ -462,6 +462,17 @@ def test_apply_onlinefix_package_rejects_uninstalled_games(monkeypatch, tmp_path
     assert "not installed" in result["message"].lower()
 
 
+def test_find_steam_game_folder_requires_appmanifest(tmp_path):
+    api = GameDropWebViewAPI()
+    library_dir = tmp_path / "steamapps" / "common"
+    library_dir.mkdir(parents=True)
+    (library_dir / "1001270").mkdir()
+
+    result = api._find_steam_game_folder([str(library_dir)], "1001270", game_name="Example Game")
+
+    assert result is None
+
+
 def test_build_html_places_add_and_remove_actions_in_separate_groups():
     html = build_html()
 

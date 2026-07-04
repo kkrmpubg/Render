@@ -1318,7 +1318,6 @@ class GameDropWebViewAPI:
         return bool(name_tokens and name_tokens.issubset(folder_tokens))
 
     def _find_steam_game_folder(self, steam_libraries, appid, game_name=None):
-        normalized_game_name = self._normalize_game_name(game_name)
         for library_path in steam_libraries:
             try:
                 steamapps_path = os.path.dirname(library_path)
@@ -1332,19 +1331,6 @@ class GameDropWebViewAPI:
                         candidate_folder = os.path.join(library_path, install_dir)
                         if os.path.isdir(candidate_folder):
                             return candidate_folder
-            except Exception:
-                continue
-
-        for library_path in steam_libraries:
-            try:
-                for item in os.listdir(library_path):
-                    item_path = os.path.join(library_path, item)
-                    if not os.path.isdir(item_path):
-                        continue
-                    if str(appid) in item:
-                        return item_path
-                    if normalized_game_name and self._folder_name_matches_game_name(item, normalized_game_name):
-                        return item_path
             except Exception:
                 continue
         return None
@@ -1367,7 +1353,6 @@ class GameDropWebViewAPI:
         return stripped
 
     def _find_steam_game_folder_from_package(self, steam_libraries, package_folder, appid, game_name=None):
-        normalized_game_name = self._normalize_game_name(game_name)
         for library_path in steam_libraries:
             try:
                 steamapps_path = os.path.dirname(library_path)
@@ -1381,43 +1366,6 @@ class GameDropWebViewAPI:
                         candidate_folder = os.path.join(library_path, install_dir)
                         if os.path.isdir(candidate_folder):
                             return candidate_folder
-            except Exception:
-                continue
-
-        package_file_names = set()
-        package_paths = []
-        for root, _, files in os.walk(package_folder):
-            for filename in files:
-                if filename.lower().endswith((".zip", ".tar.gz", ".tgz", ".tar", ".7z", ".rar")):
-                    continue
-                rel_path = os.path.relpath(os.path.join(root, filename), package_folder)
-                package_paths.append(rel_path)
-                package_file_names.add(filename.lower())
-
-        stripped_paths = self._strip_package_wrapper(package_paths)
-        package_file_names.update(os.path.basename(path).lower() for path in stripped_paths)
-
-        for library_path in steam_libraries:
-            try:
-                for item in os.listdir(library_path):
-                    item_path = os.path.join(library_path, item)
-                    if not os.path.isdir(item_path):
-                        continue
-                    if str(appid) in item:
-                        return item_path
-                    if normalized_game_name and self._folder_name_matches_game_name(item, normalized_game_name):
-                        return item_path
-            except Exception:
-                continue
-
-        for library_path in steam_libraries:
-            try:
-                for root, _, files in os.walk(library_path):
-                    for filename in files:
-                        if filename.lower() in package_file_names:
-                            candidate = root
-                            if os.path.basename(candidate).lower() not in {"common", "steamapps"}:
-                                return candidate
             except Exception:
                 continue
         return None
