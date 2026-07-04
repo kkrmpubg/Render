@@ -61,6 +61,7 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
         archive_exts = (".zip", ".rar", ".7z", ".tar", ".tar.gz", ".tgz")
         api_urls = [
             f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/tags/{appid}",
+            f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/tags/re",
             f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases",
         ]
         for api_url in api_urls:
@@ -73,12 +74,6 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
             if isinstance(releases, dict):
                 releases = [releases]
             for release in releases:
-                tag_name = str(release.get("tag_name", "")).strip().lower()
-                release_name = str(release.get("name", "")).strip().lower()
-                release_body = str(release.get("body", "")).strip().lower()
-                exact_tag_match = tag_name == appid_str.lower() or tag_name == appid_str
-                release_match = exact_tag_match or appid_str in tag_name or appid_str in release_name or appid_str in release_body
-
                 assets = release.get("assets", []) or []
                 for asset in assets:
                     name = str(asset.get("name", "")).lower()
@@ -87,8 +82,17 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
                         continue
                     if not any(name.endswith(ext) for ext in archive_exts):
                         continue
-                    if appid_str in name and release_match:
+                    if appid_str in name:
                         return url
+
+        for ext in archive_exts:
+            direct_url = f"https://github.com/{repo_owner}/{repo_name}/releases/download/re/{appid_str}{ext}"
+            try:
+                head_response = requests.head(direct_url, headers=get_github_headers(), timeout=10, allow_redirects=True)
+                if head_response.status_code < 400:
+                    return direct_url
+            except Exception:
+                continue
 
         return None
     except Exception:
