@@ -49,6 +49,12 @@ def get_remote_bypass_appids():
     return []
 
 
+def resolve_bypass_from_manifesthub(appid):
+    repo_owner = os.environ.get("DEFAULT_REPO_OWNER", "kkrmpubg")
+    repo_name = os.environ.get("DEFAULT_REPO_NAME", "ManifestHub")
+    return find_github_release_asset_url(repo_owner, repo_name, appid)
+
+
 def find_github_release_asset_url(repo_owner, repo_name, appid):
     try:
         appid_str = str(appid)
@@ -122,16 +128,17 @@ def bypass_info():
     if not appid:
         return jsonify({"bypass_available": False, "download_url": None, "status": "missing_appid"})
 
-    download_url = find_github_release_asset_url(repo_owner, repo_name, appid)
+    remote_appids = set(get_remote_bypass_appids())
+    if appid not in remote_appids:
+        fallback_appids = {"1245620", "292030", "1091500", "1151640", "990080", "1174180", "1196590", "1850570"}
+        if appid not in fallback_appids:
+            return jsonify({"bypass_available": False, "download_url": None, "status": "not_found"})
+
+    download_url = resolve_bypass_from_manifesthub(appid)
     if download_url:
         return jsonify({"bypass_available": True, "download_url": download_url, "status": "ok"})
 
-    # Fallback to known appids even if the remote bypass list is stale or missing entries.
-    fallback_appids = {"1245620", "292030", "1091500", "1151640", "990080", "1174180", "1196590", "1850570"}
-    if appid in fallback_appids:
-        return jsonify({"bypass_available": True, "download_url": None, "status": "fallback_known_appid"})
-
-    return jsonify({"bypass_available": False, "download_url": None, "status": "not_found"})
+    return jsonify({"bypass_available": True, "download_url": None, "status": "known_candidate"})
 
 
 if __name__ == "__main__":
