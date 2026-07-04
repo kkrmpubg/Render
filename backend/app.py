@@ -5,6 +5,17 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
+DEFAULT_KNOWN_BYPASS_APPIDS = {
+    "1245620",  # Elden Ring
+    "292030",   # The Witcher 3
+    "1091500",  # Cyberpunk 2077
+    "1151640",  # Horizon Zero Dawn Complete Edition
+    "990080",   # Hogwarts Legacy
+    "1174180",  # Red Dead Redemption 2
+    "1196590",  # Resident Evil Village
+    "1850570",  # Death Stranding Director's Cut
+}
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -110,9 +121,14 @@ def bypass_info():
     if not appid:
         return jsonify({"bypass_available": False, "download_url": None, "status": "missing_appid"})
 
+    known_appids = {str(appid)} if str(appid) in DEFAULT_KNOWN_BYPASS_APPIDS else set()
+    remote_appids = set(get_remote_bypass_appids())
+    if appid in known_appids or appid in remote_appids:
+        return jsonify({"bypass_available": True, "download_url": None, "status": "known_candidate"})
+
     download_url = find_github_release_asset_url(repo_owner, repo_name, appid)
     if download_url:
-        return jsonify({"bypass_available": True, "download_url": download_url, "status": "ok"})
+        return jsonify({"bypass_available": True, "download_url": download_url, "status": "release_asset_found"})
     return jsonify({"bypass_available": False, "download_url": None, "status": "not_found"})
 
 
