@@ -73,37 +73,22 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
             if isinstance(releases, dict):
                 releases = [releases]
             for release in releases:
-                tag_name = str(release.get("tag_name", "")).lower()
-                release_name = str(release.get("name", "")).lower()
-                release_body = str(release.get("body", "")).lower()
-                release_match = appid_str in tag_name or appid_str in release_name or appid_str in release_body
+                tag_name = str(release.get("tag_name", "")).strip().lower()
+                release_name = str(release.get("name", "")).strip().lower()
+                release_body = str(release.get("body", "")).strip().lower()
+                exact_tag_match = tag_name == appid_str.lower() or tag_name == appid_str
+                release_match = exact_tag_match or appid_str in tag_name or appid_str in release_name or appid_str in release_body
+
                 assets = release.get("assets", []) or []
                 for asset in assets:
                     name = str(asset.get("name", "")).lower()
                     url = asset.get("browser_download_url")
                     if not url:
                         continue
-                    if release_match and any(name.endswith(ext) for ext in archive_exts):
+                    if not any(name.endswith(ext) for ext in archive_exts):
+                        continue
+                    if appid_str in name and release_match:
                         return url
-                    if appid_str in name or name.startswith(appid_str) or any(token in name for token in (appid_str, "onlinefix", "bypass", "manifest")):
-                        return url
-                if release_match and assets:
-                    for fallback_asset in assets:
-                        fallback_name = str(fallback_asset.get("name", "")).lower()
-                        fallback_url = fallback_asset.get("browser_download_url")
-                        if fallback_url and any(fallback_name.endswith(ext) for ext in archive_exts):
-                            return fallback_url
-
-        # Fallback: try the release page HTML and the repo contents endpoint for likely asset names.
-        html_url = f"https://github.com/{repo_owner}/{repo_name}/releases/tag/{appid}"
-        try:
-            html_response = requests.get(html_url, headers=get_github_headers(), timeout=10)
-            if html_response.status_code == 200:
-                html = html_response.text or ""
-                if any(ext in html.lower() for ext in archive_exts):
-                    return html_url
-        except Exception:
-            pass
 
         return None
     except Exception:
