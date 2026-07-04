@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: simple-drm-backend
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python app.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GH_TOKEN
+        sync: false
+      - key: REMOTE_BYPASS_URL
+        value: https://raw.githubusercontent.com/kkrmpubg/gamedrop-updates/main/bypass_appids.txt
