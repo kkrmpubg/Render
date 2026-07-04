@@ -91,7 +91,7 @@ class GameDropWebViewAPI:
 
         return {
             "title": "GameDrop Steam",
-            "version": "3.0.0",
+            "version": "3.0.1",
             "status": self.status,
             "app_dir": self.app_dir,
             "steam_path": steam_path,
