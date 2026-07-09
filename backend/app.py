@@ -1,7 +1,10 @@
 import os
 import re
+import zipfile
+from io import BytesIO
+
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 app = Flask(__name__)
 
@@ -97,6 +100,105 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
         return None
     except Exception:
         return None
+
+
+def get_github_branch_tree(owner, repo_name, branch):
+    try:
+        api_url = f"https://api.github.com/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1"
+        response = requests.get(api_url, headers=get_github_headers("application/vnd.github.v3+json"), timeout=12)
+        if response.status_code != 200:
+            return None
+        data = response.json()
+        tree = data.get("tree", [])
+        return [entry.get("path") for entry in tree if entry.get("type") == "blob" and isinstance(entry.get("path"), str)]
+    except Exception:
+        return None
+
+
+def download_github_raw_file(owner, repo_name, branch, file_path):
+    raw_url = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}/{file_path}"
+    try:
+        response = requests.get(raw_url, headers=get_github_headers(), timeout=20)
+        if response.status_code == 200:
+            return response.content
+    except Exception:
+        pass
+    return None
+
+
+PACKAGE_REPO_ORDER = [
+    ("kkrmpubg", "ManifestHub"),
+    ("dvahana2424-web", "sojogamesdatabase1"),
+    ("hammerwebsite12", "sojogames2"),
+    ("SteamAutoCracks", "ManifestHub"),
+]
+PACKAGE_FILE_EXTS = ('.lua', '.zip', '.rar', '.7z', '.tar', '.tar.gz', '.tgz', '.exe', '.dll', '.bin', '.dat')
+
+
+def build_package_archive(appid):
+    appid_str = str(appid).strip()
+    if not appid_str.isdigit():
+        return None
+
+    for owner, repo_name in PACKAGE_REPO_ORDER:
+        tree_paths = get_github_branch_tree(owner, repo_name, appid_str)
+        if not tree_paths:
+            continue
+
+        files_to_download = []
+        root_files = []
+        folder_files = []
+
+        for file_path in tree_paths:
+            if '/' in file_path:
+                folder_files.append(file_path)
+                files_to_download.append(file_path)
+            else:
+                if file_path.lower().startswith(appid_str):
+                    ext = os.path.splitext(file_path)[1].lower()
+                    if ext in PACKAGE_FILE_EXTS:
+                        root_files.append(file_path)
+                        files_to_download.append(file_path)
+
+        if not files_to_download:
+            continue
+
+        downloaded_files = []
+        for file_path in files_to_download:
+            content = download_github_raw_file(owner, repo_name, appid_str, file_path)
+            if content is None:
+                downloaded_files = None
+                break
+            downloaded_files.append((file_path, content))
+
+        if not downloaded_files:
+            continue
+
+        archive_bytes = BytesIO()
+        with zipfile.ZipFile(archive_bytes, "w", zipfile.ZIP_DEFLATED) as archive:
+            for file_path, content in downloaded_files:
+                archive.writestr(file_path, content)
+        archive_bytes.seek(0)
+        return archive_bytes
+
+    return None
+
+
+@app.get("/package-archive")
+def package_archive():
+    appid = (request.args.get("appid") or "").strip()
+    if not appid or not appid.isdigit():
+        return jsonify({"error": "missing_appid"}), 400
+
+    archive_bytes = build_package_archive(appid)
+    if not archive_bytes:
+        return jsonify({"error": "package_not_found"}), 404
+
+    return Response(
+        archive_bytes.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=\"{appid}.zip\""},
+    )
 
 
 @app.get("/health")
