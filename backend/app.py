@@ -1,10 +1,7 @@
 import os
 import re
-import zipfile
-from io import BytesIO
-
 import requests
-from flask import Flask, Response, jsonify, request
+from flask import Flask, jsonify, make_response, request
 
 app = Flask(__name__)
 
@@ -12,6 +9,12 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
 }
+
+LUA_REPOS = [
+    ("kkrmpubg", "ManifestHub"),
+    ("dvahana2424-web", "sojogamesdatabase1"),
+    ("hammerwebsite12", "sojogames2"),
+]
 
 
 def get_github_headers(accept=None):
@@ -58,6 +61,32 @@ def resolve_bypass_from_manifesthub(appid):
     return find_github_release_asset_url(repo_owner, repo_name, appid)
 
 
+def find_github_branch_tree(owner, repo_name, branch):
+    try:
+        api_url = f"https://api.github.com/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1"
+        response = requests.get(api_url, headers=get_github_headers("application/vnd.github.v3+json"), timeout=12)
+        if response.status_code != 200:
+            return None
+        data = response.json()
+        tree = data.get("tree", [])
+        if not isinstance(tree, list):
+            return None
+        return [entry.get("path") for entry in tree if entry.get("type") == "blob" and isinstance(entry.get("path"), str)]
+    except Exception:
+        return None
+
+
+def get_github_raw_file(owner, repo_name, branch, path):
+    try:
+        raw_url = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}/{path}"
+        response = requests.get(raw_url, headers=get_github_headers(), timeout=20)
+        if response.status_code != 200:
+            return None
+        return response.content
+    except Exception:
+        return None
+
+
 def find_github_release_asset_url(repo_owner, repo_name, appid):
     try:
         appid_str = str(appid)
@@ -102,105 +131,6 @@ def find_github_release_asset_url(repo_owner, repo_name, appid):
         return None
 
 
-def get_github_branch_tree(owner, repo_name, branch):
-    try:
-        api_url = f"https://api.github.com/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1"
-        response = requests.get(api_url, headers=get_github_headers("application/vnd.github.v3+json"), timeout=12)
-        if response.status_code != 200:
-            return None
-        data = response.json()
-        tree = data.get("tree", [])
-        return [entry.get("path") for entry in tree if entry.get("type") == "blob" and isinstance(entry.get("path"), str)]
-    except Exception:
-        return None
-
-
-def download_github_raw_file(owner, repo_name, branch, file_path):
-    raw_url = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}/{file_path}"
-    try:
-        response = requests.get(raw_url, headers=get_github_headers(), timeout=20)
-        if response.status_code == 200:
-            return response.content
-    except Exception:
-        pass
-    return None
-
-
-PACKAGE_REPO_ORDER = [
-    ("kkrmpubg", "ManifestHub"),
-    ("dvahana2424-web", "sojogamesdatabase1"),
-    ("hammerwebsite12", "sojogames2"),
-    ("SteamAutoCracks", "ManifestHub"),
-]
-PACKAGE_FILE_EXTS = ('.lua', '.zip', '.rar', '.7z', '.tar', '.tar.gz', '.tgz', '.exe', '.dll', '.bin', '.dat')
-
-
-def build_package_archive(appid):
-    appid_str = str(appid).strip()
-    if not appid_str.isdigit():
-        return None
-
-    for owner, repo_name in PACKAGE_REPO_ORDER:
-        tree_paths = get_github_branch_tree(owner, repo_name, appid_str)
-        if not tree_paths:
-            continue
-
-        files_to_download = []
-        root_files = []
-        folder_files = []
-
-        for file_path in tree_paths:
-            if '/' in file_path:
-                folder_files.append(file_path)
-                files_to_download.append(file_path)
-            else:
-                if file_path.lower().startswith(appid_str):
-                    ext = os.path.splitext(file_path)[1].lower()
-                    if ext in PACKAGE_FILE_EXTS:
-                        root_files.append(file_path)
-                        files_to_download.append(file_path)
-
-        if not files_to_download:
-            continue
-
-        downloaded_files = []
-        for file_path in files_to_download:
-            content = download_github_raw_file(owner, repo_name, appid_str, file_path)
-            if content is None:
-                downloaded_files = None
-                break
-            downloaded_files.append((file_path, content))
-
-        if not downloaded_files:
-            continue
-
-        archive_bytes = BytesIO()
-        with zipfile.ZipFile(archive_bytes, "w", zipfile.ZIP_DEFLATED) as archive:
-            for file_path, content in downloaded_files:
-                archive.writestr(file_path, content)
-        archive_bytes.seek(0)
-        return archive_bytes
-
-    return None
-
-
-@app.get("/package-archive")
-def package_archive():
-    appid = (request.args.get("appid") or "").strip()
-    if not appid or not appid.isdigit():
-        return jsonify({"error": "missing_appid"}), 400
-
-    archive_bytes = build_package_archive(appid)
-    if not archive_bytes:
-        return jsonify({"error": "package_not_found"}), 404
-
-    return Response(
-        archive_bytes.getvalue(),
-        mimetype="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=\"{appid}.zip\""},
-    )
-
-
 @app.get("/health")
 def health():
     return jsonify({"ok": True, "service": "bypass-backend"})
@@ -230,6 +160,54 @@ def bypass_info():
         return jsonify({"bypass_available": True, "download_url": download_url, "status": "ok"})
 
     return jsonify({"bypass_available": True, "download_url": None, "status": "known_candidate"})
+
+
+@app.get("/lua-info")
+def lua_info():
+    appid = (request.args.get("appid") or "").strip()
+    if not appid:
+        return jsonify({"lua_available": False, "repos": [], "status": "missing_appid"})
+
+    repos = []
+    for owner, repo_name in LUA_REPOS:
+        branch_paths = find_github_branch_tree(owner, repo_name, appid)
+        if not branch_paths:
+            continue
+
+        lua_files = [path for path in branch_paths if path.lower().endswith(".lua")]
+        if not lua_files:
+            continue
+
+        repos.append({
+            "owner": owner,
+            "repo": repo_name,
+            "branch": appid,
+            "lua_files": lua_files,
+        })
+
+    if repos:
+        return jsonify({"lua_available": True, "repos": repos, "status": "ok"})
+    return jsonify({"lua_available": False, "repos": [], "status": "not_found"})
+
+
+@app.get("/lua-file")
+def lua_file():
+    owner = (request.args.get("owner") or "").strip()
+    repo_name = (request.args.get("repo_name") or "").strip()
+    branch = (request.args.get("branch") or "").strip()
+    path = (request.args.get("path") or "").strip()
+
+    if not owner or not repo_name or not branch or not path:
+        return jsonify({"ok": False, "error": "Missing required query parameters."}), 400
+
+    content = get_github_raw_file(owner, repo_name, branch, path)
+    if content is None:
+        return jsonify({"ok": False, "error": "Unable to fetch Lua file."}), 404
+
+    response = make_response(content)
+    response.headers["Content-Type"] = "application/octet-stream"
+    response.headers["Content-Disposition"] = f"attachment; filename={os.path.basename(path)}"
+    return response
 
 
 if __name__ == "__main__":
